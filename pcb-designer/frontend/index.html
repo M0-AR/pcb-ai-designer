@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>مصمم الدوائر الإلكترونية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100">
+    <div id="root" class="container mx-auto px-4 py-8">
+      <h1 class="text-4xl font-bold text-center mb-8">مصمم الدوائر الإلكترونية الذكي 🔌</h1>
+      
+      <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h2 class="text-2xl font-semibold mb-4">وصف الدائرة المطلوبة</h2>
+        <textarea id="circuit-description" 
+                  class="w-full h-32 p-4 border rounded-lg mb-4" 
+                  placeholder="مثال: دائرة لشحن بطارية ليثيوم 3.7V مع حماية من الشحن الزائد"></textarea>
+        <button id="generate-btn" 
+                class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition">
+          إنشاء التصميم
+        </button>
+      </div>
+
+      <div id="result" class="hidden">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- مخطط الدائرة -->
+          <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-xl font-semibold mb-4">مخطط الدائرة</h3>
+            <div id="schematic" class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+              سيتم عرض المخطط هنا
+            </div>
+            <button id="download-schematic" 
+                    class="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition hidden">
+              تحميل المخطط (SVG)
+            </button>
+          </div>
+
+          <!-- المكونات المطلوبة -->
+          <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-xl font-semibold mb-4">المكونات المطلوبة</h3>
+            <div id="components-list" class="space-y-4">
+              <!-- سيتم إضافة المكونات هنا -->
+            </div>
+            <button id="download-bom" 
+                    class="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition hidden">
+              تحميل قائمة المكونات (BOM)
+            </button>
+          </div>
+
+          <!-- التكلفة والوقت -->
+          <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-xl font-semibold mb-4">التكلفة والوقت</h3>
+            <div class="space-y-4">
+              <div class="text-2xl font-bold text-green-600" id="cost">$0.00</div>
+              <div class="text-lg" id="time">وقت التصنيع: -- أيام</div>
+              <button id="download-gerber" 
+                      class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition mb-4 hidden">
+                تحميل ملفات التصنيع (Gerber)
+              </button>
+              <button id="order-btn" 
+                      class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition">
+                تأكيد الطلب وإرسال للتصنيع
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let currentCircuitId = null;
+
+      document.getElementById('generate-btn').addEventListener('click', async () => {
+        const description = document.getElementById('circuit-description').value;
+        if (!description) {
+          alert('الرجاء إدخال وصف للدائرة');
+          return;
+        }
+
+        try {
+          const response = await fetch('http://localhost:8000/generate-design', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ description })
+          });
+
+          const data = await response.json();
+          currentCircuitId = data.circuit_id;
+          
+          // عرض النتائج
+          document.getElementById('result').classList.remove('hidden');
+          document.getElementById('cost').textContent = `$${data.estimated_cost.toFixed(2)}`;
+          document.getElementById('time').textContent = `وقت التصنيع: ${data.manufacturing_time}`;
+
+          // عرض المكونات
+          const componentsList = document.getElementById('components-list');
+          componentsList.innerHTML = data.components.map(comp => `
+            <div class="border-b pb-2">
+              <div class="font-semibold">${comp.name}</div>
+              <div class="text-sm text-gray-600">${comp.description}</div>
+              <div class="text-sm">الجهد: ${comp.voltage}</div>
+              <div class="text-sm">النوع: ${comp.package}</div>
+              <div class="text-sm">الكمية: ${comp.quantity}</div>
+              <div class="text-sm">السعر: $${comp.price}</div>
+            </div>
+          `).join('');
+
+          // إظهار أزرار التحميل
+          document.getElementById('download-schematic').classList.remove('hidden');
+          document.getElementById('download-bom').classList.remove('hidden');
+          document.getElementById('download-gerber').classList.remove('hidden');
+
+          // تحديث روابط التحميل
+          document.getElementById('download-schematic').onclick = () => window.open(data.schematic_url);
+          document.getElementById('download-bom').onclick = () => window.open(data.bom_url);
+          document.getElementById('download-gerber').onclick = () => window.open(data.gerber_url);
+
+        } catch (error) {
+          alert('حدث خطأ أثناء معالجة طلبك');
+          console.error(error);
+        }
+      });
+
+      document.getElementById('order-btn').addEventListener('click', async () => {
+        if (!currentCircuitId) {
+          alert('الرجاء إنشاء التصميم أولاً');
+          return;
+        }
+
+        try {
+          const response = await fetch('http://localhost:8000/submit-order', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ circuit_id: currentCircuitId })
+          });
+
+          const data = await response.json();
+          alert(`تم استلام طلبك بنجاح!\nرقم الطلب: ${data.order_id}\nموعد التسليم المتوقع: ${data.estimated_delivery}`);
+        } catch (error) {
+          alert('حدث خطأ أثناء إرسال الطلب');
+          console.error(error);
+        }
+      });
+    </script>
+  </body>
+</html>
